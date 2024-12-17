@@ -1,43 +1,50 @@
-﻿namespace Leonardo;
+﻿using Microsoft.EntityFrameworkCore;
 
-public record FibonacciResult(int Input, int Result);
+namespace Leonardo;
 
-public static class Fibonacci
+public record FibonacciResult(int Input, long Result);
+
+public class Fibonacci(FibonacciDataContext context)
 {
-    private static int Run(int n)
+    private readonly FibonacciDataContext _context = context;
+
+    private int Run(int i)
     {
-        if (n <= 1) return n;
-        return Run(n - 1) + Run(n - 2);
+        if (i <= 2)
+        {
+            return 1;
+        }
+
+        return Run(i - 1) + Run(i - 2);
     }
-    
-    public static async Task<List<FibonacciResult>> RunAsync(string[] strings)
+
+    public async Task<List<FibonacciResult>> RunAsync(string[] strings)
     {
         var tasks = new List<Task<FibonacciResult>>();
 
         foreach (var input in strings)
         {
-            if (input == "test")
-            {
-                Console.WriteLine("test");
-            }
+            var i = int.Parse(input);
+            var result = await _context.TFibonaccis.Where(f => f.FibInput == i).FirstOrDefaultAsync();
 
-            var int32 = Convert.ToInt32(input);
-            var r = Task.Run(() => 
-            {
-                var result = Fibonacci.Run(int32);
-                return new FibonacciResult(int32, result);
-            });
-            tasks.Add(r);
+            tasks.Add(result != null
+                ? Task.FromResult(new FibonacciResult(i, result.FibOutput))
+                : Task.Run(() => new FibonacciResult(i, Run(i))));
         }
 
-        //Task.WaitAll(tasks.ToArray());
         var results = new List<FibonacciResult>();
         foreach (var task in tasks)
         {
-            var r = await task;
-            results.Add(r);
+            results.Add(await task);
+
+            _context.TFibonaccis.Add(new TFibonacci
+            {
+                FibInput = results.Last().Input,
+                FibOutput = results.Last().Result
+            });
         }
+
+        await _context.SaveChangesAsync();
         return results;
     }
-
 }
